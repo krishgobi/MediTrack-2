@@ -437,6 +437,10 @@ def get_and_update_user_name():
 
 @app.route("/", methods=["GET", "POST"])
 def entry():
+    # Ensure subjects are loaded
+    if not subjects_storage:
+        Subject.load_from_file()
+    
     # Get user name from database and update session
     user_name = get_and_update_user_name()
     
@@ -444,10 +448,17 @@ def entry():
     subjects = Subject.get_all()
     num_subjects = len(subjects)
     upcoming_exams = Exam.query.filter(Exam.date >= datetime.now().date()).order_by(Exam.date.asc()).all()
+    
+    print(f"DEBUG: Entry route - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams")
+    
     return render_template('dashboard.html', num_subjects=num_subjects, user_name=user_name, remainders=remainders, upcoming_exams=upcoming_exams)
 
 @app.route("/dashboard")
 def dashboard():
+    # Ensure subjects are loaded
+    if not subjects_storage:
+        Subject.load_from_file()
+    
     # Get user name from database and update session
     user_name = get_and_update_user_name()
     
@@ -456,7 +467,9 @@ def dashboard():
     num_subjects = len(subjects)
     upcoming_exams = Exam.query.filter(Exam.date >= datetime.now().date()).order_by(Exam.date.asc()).all()
     
-    print(f"DEBUG: Dashboard - Found {len(upcoming_exams)} upcoming exams")
+    print(f"DEBUG: Dashboard - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams")
+    
+    return render_template('dashboard.html', num_subjects=num_subjects, user_name=user_name, remainders=remainders, upcoming_exams=upcoming_exams)
     for exam in upcoming_exams:
         print(f"DEBUG: Exam ID: {exam.id}, Subject: {exam.subject}, Date: {exam.date}")
     
@@ -612,6 +625,10 @@ def view_history():
 
 @app.route("/view_subject")
 def view_subject():
+    # Ensure subjects are loaded
+    if not subjects_storage:
+        Subject.load_from_file()
+    
     subjects = Subject.get_all()
     print(f"DEBUG: view_subject route - Found {len(subjects)} subjects")
     for subject in subjects:
@@ -1490,6 +1507,10 @@ def rename_profile():
 
 @app.route('/chatbot_ask', methods=['POST'])
 def chatbot_ask():
+    # Ensure subjects are loaded before processing chatbot requests
+    if not subjects_storage:
+        Subject.load_from_file()
+    
     data = request.get_json()
     question = data.get('question', '').lower()
     reply = "I'm sorry, I couldn't process that."
@@ -1499,13 +1520,15 @@ def chatbot_ask():
         subjects = Subject.get_all()
         if subjects:
             # Each subject links to its detail page
-            reply = 'Here are your current subjects:<ul>' + ''.join(
-                f'<li><a href="/view_subject_details/{s.namesub}" target="_blank">{s.namesub}</a> (Staff: {s.staffname})</li>' for s in subjects
-            ) + '</ul>'
+            reply = '<b>📚 Your Current Subjects:</b><ul style="margin: 10px 0; padding-left: 20px;">'
+            for s in subjects:
+                reply += f'<li style="margin: 5px 0;"><a href="/view_subject_details/{s.namesub}" target="_blank" style="color: #4c1d95; text-decoration: none;"><strong>{s.namesub}</strong></a><br><small style="color: #666;">Staff: {s.staffname}</small></li>'
+            reply += '</ul><p><a href="/view_subject" target="_blank" style="color: #4c1d95;">📋 View All Subjects</a></p>'
         else:
-            reply = 'No subjects found.'
+            reply = '📚 No subjects found. <a href="/view_subject" target="_blank" style="color: #4c1d95;">Add your first subject</a>!'
+            
     # Example: Show all reminders (only show upcoming/active, not expired)
-    elif 'reminder' in question:
+    elif 'reminder' in question or 'remainder' in question:
         from datetime import date, datetime
         today = date.today()
         current_time = datetime.now().time()
@@ -1520,17 +1543,27 @@ def chatbot_ask():
         all_active_reminders = today_remainders + future_remainders
         
         if all_active_reminders:
-            reply = '<b>Active & Upcoming Reminders:</b><ul>'
+            reply = '<b>🔔 Active & Upcoming Reminders:</b><ul style="margin: 10px 0; padding-left: 20px;">'
             for r in all_active_reminders:
-                # Link to remainders page, anchor to reminder id if possible
-                status = " (Today)" if r.date == today else ""
-                reply += f'<li><a href="/view_remainders#rem-{r.id}" target="_blank">{r.content} on {r.date.strftime('%Y-%m-%d')} at {r.time.strftime('%H:%M')}{status}</a></li>'
-            reply += '</ul>'
+                # Link to remainders page
+                status = " <span style='color: #e74c3c;'>(Today!)</span>" if r.date == today else ""
+                reply += f'<li style="margin: 5px 0;"><a href="/view_remainders" target="_blank" style="color: #4c1d95; text-decoration: none;"><strong>{r.content}</strong></a><br><small style="color: #666;">{r.date.strftime('%Y-%m-%d')} at {r.time.strftime('%H:%M')}{status}</small></li>'
+            reply += '</ul><p><a href="/view_remainders" target="_blank" style="color: #4c1d95;">📅 View All Reminders</a></p>'
         else:
-            reply = 'No active or upcoming reminders found.'
-        # Example: Direct link to patient history page
-    elif 'patient' in question:
-        reply = '<b>Patient Records:</b><br>Click here to view all patient history records: <a href="/subject_history_page" target="_blank"><i class="fas fa-history me-2"></i>View Patient History</a>'
+            reply = '🔔 No active or upcoming reminders found. <a href="/view_remainders" target="_blank" style="color: #4c1d95;">Create your first reminder</a>!'
+            
+    # Example: Patient history
+    elif 'patient' in question or 'history' in question:
+        # Get recent patient records
+        recent_patients = SubjectHistory.query.order_by(SubjectHistory.id.desc()).limit(5).all()
+        if recent_patients:
+            reply = '<b>👥 Recent Patient Records:</b><ul style="margin: 10px 0; padding-left: 20px;">'
+            for patient in recent_patients:
+                reply += f'<li style="margin: 5px 0;"><a href="/subject_history_page" target="_blank" style="color: #4c1d95; text-decoration: none;"><strong>{patient.patient_name}</strong></a><br><small style="color: #666;">Subject: {patient.namesub} | Disease: {patient.disease}</small></li>'
+            reply += '</ul><p><a href="/subject_history_page" target="_blank" style="color: #4c1d95;">📋 View All Patient History</a></p>'
+        else:
+            reply = '👥 No patient records found. <a href="/subject_history_page" target="_blank" style="color: #4c1d95;">Add your first patient record</a>!'
+            
     # Example: If user asks about a specific subject or patient, provide direct link
     elif 'details for' in question or 'show details for' in question:
         # Try to extract subject or patient name
@@ -1541,22 +1574,42 @@ def chatbot_ask():
             # Try subject first
             subject = Subject.get_by_name(name)
             if subject:
-                reply = f'View details for <a href="/view_subject_details/{subject.namesub}" target="_blank">{subject.namesub}</a>.'
+                reply = f'📚 <strong>{subject.namesub}</strong><br>Staff: {subject.staffname}<br>Notes: {subject.note}<br><a href="/view_subject_details/{subject.namesub}" target="_blank" style="color: #4c1d95;">View Full Details</a>'
             else:
                 # Try patient
                 patient = SubjectHistory.query.filter(SubjectHistory.patient_name.ilike(f'%{name}%')).first()
                 if patient:
-                    reply = f'View patient record for <a href="/view_subject_details/{patient.namesub}" target="_blank">{patient.patient_name}</a>.'
+                    reply = f'👥 Patient found: <strong>{patient.patient_name}</strong><br>Subject: {patient.namesub}<br>Disease: {patient.disease}<br><a href="/subject_history_page" target="_blank" style="color: #4c1d95;">View Patient History</a>'
                 else:
-                    reply = 'No matching subject or patient found.'
+                    reply = f'❌ No matching subject or patient found for "{name}".'
         else:
-            reply = 'Please specify a subject or patient name.'
+            reply = '❓ Please specify a subject or patient name (e.g., "details for Math").'
+            
     # Example: Show today's date
     elif 'date' in question or 'today' in question:
-        reply = f"Today's date is <strong>{datetime.now().strftime('%B %d, %Y')}</strong>."
+        reply = f"📅 Today's date is <strong>{datetime.now().strftime('%B %d, %Y')}</strong>."
+        
+    # Help command
+    elif 'help' in question or 'commands' in question:
+        reply = '''
+        <b>🤖 MediBot Commands:</b><br><br>
+        📚 <strong>Subjects:</strong> "show subjects" or "all subjects"<br>
+        👥 <strong>Patients:</strong> "patient history" or "patients"<br>
+        🔔 <strong>Reminders:</strong> "reminders" or "show reminders"<br>
+        📅 <strong>Date:</strong> "what's today's date"<br>
+        🔍 <strong>Details:</strong> "details for [subject name]"<br>
+        ❓ <strong>Help:</strong> "help" or "commands"
+        '''
+        
     # Default fallback
     else:
-        reply = "Sorry, I couldn't understand. Try asking about <b>subjects</b>, <b>patients</b>, or <b>reminders</b>."
+        reply = '''
+        ❓ I didn't understand that. Here's what I can help with:<br><br>
+        • Type <strong>"subjects"</strong> to see all subjects<br>
+        • Type <strong>"patients"</strong> to see patient records<br>
+        • Type <strong>"reminders"</strong> to see upcoming reminders<br>
+        • Type <strong>"help"</strong> for more commands
+        '''
     return jsonify({'reply': reply})
 
 @app.route('/delete_exam/<int:exam_id>', methods=['POST'])

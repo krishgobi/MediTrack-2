@@ -927,7 +927,12 @@
                 <i class="fas fa-robot me-2"></i>
                 <strong>MediBot Assistant</strong>
             </div>
-            <button id="chatbot-close" style="background: none; border: none; color: white; font-size: 1.25rem;">&times;</button>
+            <div>
+                <button id="chatbot-clear" style="background: none; border: none; color: white; font-size: 0.9rem; margin-right: 10px;" title="Clear Chat History">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button id="chatbot-close" style="background: none; border: none; color: white; font-size: 1.25rem;">&times;</button>
+            </div>
         </div>
         <div id="chatbot-messages">
             <div class="chatbot-message bot">
@@ -1050,12 +1055,70 @@
         const chatbotInput = document.getElementById('chatbot-input');
         const chatbotSend = document.getElementById('chatbot-send');
 
+        // Load saved chat messages from localStorage
+        function loadChatHistory() {
+            const savedMessages = localStorage.getItem('meditrack_chat_history');
+            if (savedMessages) {
+                try {
+                    const messages = JSON.parse(savedMessages);
+                    // Clear current messages except the welcome message
+                    const welcomeMessage = chatbotMessages.querySelector('.chatbot-message.bot');
+                    chatbotMessages.innerHTML = '';
+                    if (welcomeMessage) {
+                        chatbotMessages.appendChild(welcomeMessage);
+                    }
+                    
+                    // Add saved messages
+                    messages.forEach(msg => {
+                        addChatMessage(msg.text, msg.sender, false); // false = don't save to localStorage again
+                    });
+                } catch (e) {
+                    console.error('Error loading chat history:', e);
+                }
+            }
+        }
+
+        // Save chat messages to localStorage
+        function saveChatHistory() {
+            const messages = [];
+            const messageElements = chatbotMessages.querySelectorAll('.chatbot-message:not(:first-child)'); // Skip welcome message
+            messageElements.forEach(element => {
+                const isBot = element.classList.contains('bot');
+                const text = element.querySelector('.chat-bubble').innerHTML;
+                messages.push({
+                    text: text,
+                    sender: isBot ? 'bot' : 'user'
+                });
+            });
+            localStorage.setItem('meditrack_chat_history', JSON.stringify(messages.slice(-20))); // Keep last 20 messages
+        }
+
+        // Clear chat history
+        function clearChatHistory() {
+            localStorage.removeItem('meditrack_chat_history');
+            // Keep only the welcome message
+            const welcomeMessage = chatbotMessages.querySelector('.chatbot-message.bot');
+            chatbotMessages.innerHTML = '';
+            if (welcomeMessage) {
+                chatbotMessages.appendChild(welcomeMessage);
+            }
+        }
+
         chatbotToggle.addEventListener('click', () => {
             chatbotWidget.style.display = 'flex';
+            loadChatHistory(); // Load history when opening chatbot
         });
 
         chatbotClose.addEventListener('click', () => {
             chatbotWidget.style.display = 'none';
+        });
+
+        // Add clear chat functionality
+        const chatbotClear = document.getElementById('chatbot-clear');
+        chatbotClear.addEventListener('click', () => {
+            if (confirm('Clear all chat history?')) {
+                clearChatHistory();
+            }
         });
 
         // Dynamic data from backend (Jinja2 to JS)
@@ -1068,7 +1131,7 @@
             return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         }
 
-        function addChatMessage(text, sender) {
+        function addChatMessage(text, sender, shouldSave = true) {
             const msg = document.createElement('div');
             msg.className = `chatbot-message ${sender} fade-in`;
             const bubble = document.createElement('div');
@@ -1077,6 +1140,11 @@
             msg.appendChild(bubble);
             chatbotMessages.appendChild(msg);
             chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+            
+            // Save to localStorage unless explicitly told not to
+            if (shouldSave) {
+                saveChatHistory();
+            }
         }
 
         function addLoaderMessage() {
