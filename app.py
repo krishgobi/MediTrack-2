@@ -449,9 +449,23 @@ def entry():
     num_subjects = len(subjects)
     upcoming_exams = Exam.query.filter(Exam.date >= datetime.now().date()).order_by(Exam.date.asc()).all()
     
-    print(f"DEBUG: Entry route - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams")
+    # Count documents/files
+    documents_count = 0
+    try:
+        if os.path.exists(UPLOAD_FOLDER):
+            documents_count = len([f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f))])
+    except:
+        documents_count = 0
     
-    return render_template('dashboard.html', num_subjects=num_subjects, user_name=user_name, remainders=remainders, upcoming_exams=upcoming_exams)
+    print(f"DEBUG: Entry route - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams, {documents_count} documents")
+    
+    return render_template('dashboard.html', 
+                         num_subjects=num_subjects, 
+                         user_name=user_name, 
+                         remainders=remainders, 
+                         upcoming_exams=upcoming_exams,
+                         documents_count=documents_count,
+                         subjects=subjects)
 
 @app.route("/dashboard")
 def dashboard():
@@ -467,9 +481,23 @@ def dashboard():
     num_subjects = len(subjects)
     upcoming_exams = Exam.query.filter(Exam.date >= datetime.now().date()).order_by(Exam.date.asc()).all()
     
-    print(f"DEBUG: Dashboard - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams")
+    # Count documents/files
+    documents_count = 0
+    try:
+        if os.path.exists(UPLOAD_FOLDER):
+            documents_count = len([f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f))])
+    except:
+        documents_count = 0
     
-    return render_template('dashboard.html', num_subjects=num_subjects, user_name=user_name, remainders=remainders, upcoming_exams=upcoming_exams)
+    print(f"DEBUG: Dashboard - Found {num_subjects} subjects, {len(upcoming_exams)} upcoming exams, {documents_count} documents")
+    
+    return render_template('dashboard.html', 
+                         num_subjects=num_subjects, 
+                         user_name=user_name, 
+                         remainders=remainders, 
+                         upcoming_exams=upcoming_exams,
+                         documents_count=documents_count,
+                         subjects=subjects)
     for exam in upcoming_exams:
         print(f"DEBUG: Exam ID: {exam.id}, Subject: {exam.subject}, Date: {exam.date}")
     
